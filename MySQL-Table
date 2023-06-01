@@ -1,0 +1,214 @@
+Status update Team member Eze wisdom chinecherem and Ann Ifechidere
+
+MySQL Table
+Created a table product under database MART in MySQL server with the following structure:
+CREATE TABLE `product` (
+ `id` int unsigned COLLATE utf8mb4_unicode_ci NOT NULL AUTO_INCREMENT,
+ `name` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
+ `code` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
+ `image` text COLLATE utf8mb4_unicode_ci NOT NULL,
+ `price` double COLLATE utf8mb4_unicode_ci NOT NULL,
+ PRIMARY KEY (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=9 DEFAULT CHARSET=utf8mb4;
+
+test the application when I finish with coding, so I am dumping some data into product table.
+INSERT INTO `product` (`id`, `name`, `code`, `image`, `price`) VALUE
+(1, 'Habesha kemis', 'AMTR01', 'product-images/kemis.jpg', 12000.00),
+(2, 'Gebeta', 'USB02', 'product-images/external-hard-drive.jpg', 5000.00),
+(3, 'Shoes', 'SH03', 'product-images/shoes.jpg', 1000.00),
+(4, 'XP 1155 Intel Core Laptop', 'LPN4', 'product-images/laptop.jpg', 80000.00),
+(5, 'Leather Jacket', '3DCAM01', 'product-images/camera.jpg', 150000.00),
+(6, 'Simple Mobile', 'MB06', 'product-images/mobile.jpg', 3000.00),
+(7, 'Luxury Ultra thin Wrist Watch', 'WristWear03', 'product-images/watch.jpg', 3000.00),
+(8, 'Headphone', 'HD08', 'product-images/headphone.jpg', 400.00);
+
+Second step Configuring Flask
+Create the below app.py script (py is the extension to indicate Python script) where I import the flask module. This file should be created under the project root directory. Notice how I create flask instance. I have configured a secret key, which is required for your application’s session.
+from flask import Flas
+
+app = Flask(__name__)
+app.secret_key = "secret key"
+Third step :
+Database Configuration
+I create the below db_config.py Python script under project root directory to setup the MySQL database configurations for connecting to database.
+I need to configure database connection with flask module and that’s why I have imported app module and setup the MySQL configuration with flask module.
+from app import app
+from flaskext.mysql import MySQL
+
+mysql = MySQL()
+ 
+# MySQL configurations
+app.config['MYSQL_DATABASE_USER'] = 'root'
+app.config['MYSQL_DATABASE_PASSWORD'] = 'root'
+app.config['MYSQL_DATABASE_DB'] = 'roytuts'
+app.config['MYSQL_DATABASE_HOST'] = 'localhost'
+mysql.init_app(app)
+Fourth step Configuring URLs
+Next I will create main.py script that will define all URIs or Action paths for performing certain operations used for cart or to fetch all products from the database.
+It will connect to MySQL database server and query the database to read all products from the database table.
+In this script I perform certain operations with user interaction.
+I first import required modules into the script. I then define the end-point / for displaying a view where user will see all the products.
+Next I need to validate user input data and save those input data into into cart, i.e., flask session. So I define another end-point /add. Here I fetch the data based on product’s code from MySQL database and put into session against unique product keys.
+I use http method GET for displaying view and POST method for sending data to server side. By default http method is GET if you do not specify http method.
+I use render_template function from flask to show the view.
+Initially when there is no product or item in the cart then you won’t see any item or product in the cart on home page or products page.
+If you add product to cart from Add to Cart link shown on each product then you will see product gets added and displayed into the cart.
+I define /empty endpoint to clear all items from the cart.
+Next I define /delete/<string:code> end-point where user deletes product one by one from the cart.
+import pymysql
+from app import app
+from db_config import mysql
+from flask import flash, session, render_template, request, redirect, url_for
+#from werkzeug import generate_password_hash, check_password_hash
+from werkzeug.security import generate_password_hash, check_password_hash
+  
+@app.route('/add', methods=['POST'])
+def add_product_to_cart():
+ cursor = None
+ try:
+  _quantity = int(request.form['quantity'])
+  _code = request.form['code']
+  # validate the received values
+  if _quantity and _code and request.method == 'POST':
+   conn = mysql.connect()
+   cursor = conn.cursor(pymysql.cursors.DictCursor)
+   cursor.execute("SELECT * FROM product WHERE code=%s", _code)
+   row = cursor.fetchone()
+   
+   itemArray = { row['code'] : {'name' : row['name'], 'code' : row['code'], 'quantity' : _quantity, 'price' : row['price'], 'image' : row['image'], 'total_price': _quantity * row['price']}}
+   
+   all_total_price = 0
+   all_total_quantity = 0
+   
+   session.modified = True
+   if 'cart_item' in session:
+    if row['code'] in session['cart_item']:
+     for key, value in session['cart_item'].items():
+      if row['code'] == key:
+       #session.modified = True
+       #if session['cart_item'][key]['quantity'] is not None:
+       # session['cart_item'][key]['quantity'] = 0
+       old_quantity = session['cart_item'][key]['quantity']
+       total_quantity = old_quantity + _quantity
+       session['cart_item'][key]['quantity'] = total_quantity
+       session['cart_item'][key]['total_price'] = total_quantity * row['price']
+    else:
+     session['cart_item'] = array_merge(session['cart_item'], itemArray)
+
+    for key, value in session['cart_item'].items():
+     individual_quantity = int(session['cart_item'][key]['quantity'])
+     individual_price = float(session['cart_item'][key]['total_price'])
+     all_total_quantity = all_total_quantity + individual_quantity
+     all_total_price = all_total_price + individual_price
+   else:
+    session['cart_item'] = itemArray
+    all_total_quantity = all_total_quantity + _quantity
+    all_total_price = all_total_price + _quantity * row['price']
+   
+   session['all_total_quantity'] = all_total_quantity
+   session['all_total_price'] = all_total_price
+   
+   return redirect(url_for('.products'))
+  else:   
+   return 'Error while adding item to cart'
+ except Exception as e:
+  print(e)
+ finally:
+  cursor.close() 
+  conn.close()
+  
+@app.route('/')
+def products():
+ try:
+  conn = mysql.connect()
+  cursor = conn.cursor(pymysql.cursors.DictCursor)
+  cursor.execute("SELECT * FROM product")
+  rows = cursor.fetchall()
+  return render_template('products.html', products=rows)
+ except Exception as e:
+  print(e)
+ finally:
+  cursor.close() 
+  conn.close()
+
+@app.route('/empty')
+def empty_cart():
+ try:
+  session.clear()
+  return redirect(url_for('.products'))
+ except Exception as e:
+  print(e)
+
+@app.route('/delete/<string:code>')
+def delete_product(code):
+ try:
+  all_total_price = 0
+  all_total_quantity = 0
+  session.modified = True
+  
+  for item in session['cart_item'].items():
+   if item[0] == code:    
+    session['cart_item'].pop(item[0], None)
+    if 'cart_item' in session:
+     for key, value in session['cart_item'].items():
+      individual_quantity = int(session['cart_item'][key]['quantity'])
+      individual_price = float(session['cart_item'][key]['total_price'])
+      all_total_quantity = all_total_quantity + individual_quantity
+      all_total_price = all_total_price + individual_price
+    break
+  
+  if all_total_quantity == 0:
+   session.clear()
+  else:
+   session['all_total_quantity'] = all_total_quantity
+   session['all_total_price'] = all_total_price
+  
+  #return redirect('/')
+  return redirect(url_for('.products'))
+ except Exception as e:
+  print(e)
+  
+def array_merge( first_array , second_array ):
+ if isinstance( first_array , list ) and isinstance( second_array , list ):
+  return first_array + second_array
+ elif isinstance( first_array , dict ) and isinstance( second_array , dict ):
+  return dict( list( first_array.items() ) + list( second_array.items() ) )
+ elif isinstance( first_array , set ) and isinstance( second_array , set ):
+  return first_array.union( second_array )
+ return False  
+  
+if __name__ == "__main__":
+    app.run()
+
+Challenges 
+
+Database management: Flask does not provide an ORM (Object-Relational Mapping) system by default, which can make it challenging to manage databases. You may need to i used  third-party libraries pymysql, 
+Getting familiar with it was challenging.
+
+Testing: Testing is an important part of building a web app, but it was challenging to write effective tests for Flask apps. I used additionally unittest.
+
+Collaboration/Communication:
+
+
+I have done this project by my own but my peer chocobae Ann Ifechidere belete helped me with some pymyql errors 
+
+Project Updates
+
+Nothing special changed from the main proposed project but
+I decided to add check out features to my web app,
+
+Progress
+
+The project is going well but more difficult than expected and I rate it 8/10 the progress this week, by far project is not really going as planned though but it will be completed by the proposed date or earlier.
+Thanks to the organizers.
+
+
+
+
+
+Screenshots:
+
+
+
+
+
